@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DrawGuess — Real-time Drawing &amp; Guessing</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ============ TOP BAR ============ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-icon">✏️</span><span>DrawGuess</span>
+  </div>
+  <div class="topbar-right">
+    <span id="roomCodeBadge" class="badge hidden"></span>
+    <button id="voiceToggle" class="icon-btn" title="Toggle turn announcements (voice)">🔊</button>
+    <button id="themeToggle" class="icon-btn" title="Toggle dark/light mode">🌙</button>
+  </div>
+</header>
+
+<!-- ============ TOAST / ANNOUNCEMENT ============ -->
+<div id="announcement" class="announcement hidden"></div>
+
+<!-- ============ ENTRY SCREEN ============ -->
+<section id="entryScreen" class="screen">
+  <div class="entry-card">
+    <h1>Draw. Guess. Win.</h1>
+    <p class="muted">Create a room or join one with a link/code. Supports 60+ players across custom teams.</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="create">Create Room</button>
+      <button class="tab-btn" data-tab="join">Join Room</button>
+    </div>
+
+    <div id="createTab" class="tab-panel">
+      <label>Your Name</label>
+      <input id="createName" maxlength="20" placeholder="e.g. Priya" />
+
+      <label>Set a Passcode</label>
+      <input id="createPasscode" maxlength="20" placeholder="e.g. friday-night" />
+      <p class="muted small">Players will use this exact passcode to join. Letters, numbers, and dashes only, at least 3 characters.</p>
+      <p id="createReqHint" class="hint-text">Enter your name and a passcode (3+ characters) to continue.</p>
+
+      <label>Teams (optional — add now or later)</label>
+      <div class="create-team-row">
+        <input id="pendingTeamName" maxlength="24" placeholder="Team name" />
+        <button id="addPendingTeamBtn" type="button">+ Add</button>
+      </div>
+      <div id="pendingTeamsList" class="pending-teams-list"></div>
+
+      <button id="createRoomBtn" class="primary-btn" disabled>Create Room as Host</button>
+    </div>
+
+    <div id="joinTab" class="tab-panel hidden">
+      <label>Your Name</label>
+      <input id="joinName" maxlength="20" placeholder="e.g. Arjun" />
+      <label>Passcode</label>
+      <input id="joinRoomId" maxlength="20" placeholder="e.g. friday-night" />
+      <p id="joinReqHint" class="hint-text">Enter your name and the room's passcode to continue.</p>
+      <button id="joinRoomBtn" class="primary-btn" disabled>Join Room</button>
+    </div>
+    <p id="entryError" class="error hidden"></p>
+  </div>
+</section>
+
+<!-- ============ LOBBY / GAME SCREEN ============ -->
+<section id="gameScreen" class="screen hidden">
+  <div class="layout">
+
+    <!-- LEFT: Teams -->
+    <aside class="panel teams-panel">
+      <h2>Teams</h2>
+      <div id="teamsList" class="teams-list"></div>
+      <p id="noTeamsNote" class="muted small hidden">No teams yet.</p>
+
+      <div id="createTeamRow" class="create-team-row hidden">
+        <input id="newTeamName" maxlength="24" placeholder="New team name" />
+        <button id="createTeamBtn">+ Add</button>
+      </div>
+
+      <div id="hostControls" class="host-controls hidden">
+        <label for="roundsInput">Rounds (per team turn)</label>
+        <input id="roundsInput" type="number" min="1" max="20" value="2" />
+        <button id="startGameBtn" class="primary-btn" disabled>Start Game</button>
+        <p id="waitingMsg" class="muted small hidden">Add at least one player to a team to enable Start.</p>
+      </div>
+
+      <div id="nonHostWaiting" class="waiting-note hidden">
+        ⏳ Waiting for the host to start the game...
+      </div>
+
+      <div class="share-box">
+        <label>Share this link</label>
+        <div class="share-row">
+          <input id="shareLink" readonly />
+          <button id="copyLinkBtn">Copy</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER: Canvas + phase info -->
+    <main class="panel canvas-panel">
+      <div class="phase-bar">
+        <div id="phaseLabel" class="phase-label">Lobby</div>
+        <div id="roundLabel" class="round-label"></div>
+        <div class="timer-wrap">
+          <svg id="timerRing" width="46" height="46" viewBox="0 0 46 46">
+            <circle cx="23" cy="23" r="20" class="timer-bg"/>
+            <circle id="timerFg" cx="23" cy="23" r="20" class="timer-fg"/>
+          </svg>
+          <span id="timerText">--</span>
+        </div>
+      </div>
+
+      <div id="drawerBanner" class="drawer-banner hidden"></div>
+      <div id="wordMaskDisplay" class="word-mask hidden"></div>
+
+      <div id="turnIntroOverlay" class="turn-intro-overlay hidden">
+        <div class="turn-intro-badge">Up Next</div>
+        <div id="turnIntroTeamName" class="turn-intro-team"></div>
+        <div class="turn-intro-sub">get ready!</div>
+        <div id="turnIntroMembers" class="turn-intro-members"></div>
+      </div>
+
+      <div id="wordChoiceOverlay" class="word-choice-overlay hidden">
+        <h3>Pick a word to draw!</h3>
+        <div id="wordOptionsRow" class="word-options-row"></div>
+      </div>
+
+      <div id="waitingForWordOverlay" class="waiting-overlay hidden">
+        <p>✏️ Drawer is choosing a word...</p>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="drawCanvas" width="800" height="500"></canvas>
+      </div>
+
+      <div id="toolBar" class="toolbar hidden">
+        <input type="color" id="colorPicker" value="#1f2937" />
+        <input type="range" id="brushSize" min="1" max="40" value="6" />
+        <button id="eraserBtn" title="Eraser">🧹</button>
+        <button id="clearCanvasBtn" title="Clear board">🗑 Clear</button>
+      </div>
+    </main>
+
+    <!-- RIGHT: Chat / Guess feed -->
+    <aside class="panel chat-panel">
+      <h2>Guesses &amp; Chat</h2>
+      <div id="chatFeed" class="chat-feed"></div>
+      <form id="guessForm" class="guess-form">
+        <input id="guessInput" placeholder="Waiting for game to start..." autocomplete="off" disabled />
+        <button type="submit" id="guessSendBtn" disabled>Send</button>
+      </form>
+    </aside>
+  </div>
+
+  <!-- Scoreboard footer -->
+  <div id="scoreboardBar" class="scoreboard-bar"></div>
+</section>
+
+<!-- ============ GAME OVER MODAL ============ -->
+<div id="gameOverModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>🏆 Game Over!</h2>
+    <div id="finalScores" class="final-scores"></div>
+    <button id="closeGameOverBtn" class="primary-btn">Close</button>
+  </div>
+</div>
+
+<audio id="turnSound" preload="auto">
+  <source src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAgD4AAIA+AAABAAgAZGF0YQAAAAA=" type="audio/wav">
+</audio>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+</body>
+</html>
